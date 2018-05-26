@@ -1,49 +1,71 @@
 #include "Factory.h"
-#include <pthread.h>
 #include <vector>
+#include <map>
+
 
 class ProductionArgument {
 public:
-    ProductionArgument(Factory *factory, int num_products, Product *products)
+    ProductionArgument(Factory *factory, int num_products, Product *products,
+                       unsigned int id)
             : factory(factory), num_products(num_products),
-              products(products) {}
+              products(products), id(id) {}
 
     ~ProductionArgument() = default;
 
     Factory *factory;
     int num_products;
     Product *products;
+    unsigned int id;
 };
 
 Factory::Factory() : open_to_returns(true), open_to_visitors(true),
-                     stolen_products(new std::list<std::pair<Product, int>>),
-                     available_products(new std::list<Product>) {
-}
-
-Factory::~Factory() {
-    delete this->stolen_products;
-    delete this->available_products;
+                     products_being_edited(false) {
+    pthread_mutexattr_init(&products_lock_attributes);
+    pthread_mutexattr_settype(&products_lock_attributes,
+                              PTHREAD_MUTEX_ERRORCHECK);
+    pthread_mutex_init(&products_lock, &products_lock_attributes);
+    pthread_cond_init(&products_cond, nullptr);
 }
 
 void *ProductionFunc(void *arg) {
-    auto factory = static_cast<ProductionArgument*>(arg)->factory;
-    auto num_products = static_cast<ProductionArgument*>(arg)->num_products;
-    auto products = static_cast<ProductionArgument*>(arg)->products;
+    auto factory = static_cast<ProductionArgument *>(arg)->factory;
+    auto num_products = static_cast<ProductionArgument *>(arg)->num_products;
+    auto products = static_cast<ProductionArgument *>(arg)->products;
+    auto id = static_cast<ProductionArgument *>(arg)->id;
     factory->Factory::produce(num_products, products);
-    delete static_cast<ProductionArgument*>(arg);
+    delete factory->removeProductionThreadByID(id);
+    delete static_cast<ProductionArgument *>(arg);
 }
 
 void Factory::startProduction(int num_products, Product *products,
                               unsigned int id) {
-    auto production_thread = new pthread_t;
-    auto arg = new ProductionArgument(this, num_products, products);
-    pthread_create(production_thread, nullptr, ProductionFunc, arg);
+    production_threads[id] = new pthread_t;
+    auto arg = new ProductionArgument(this, num_products, products, id);
+    pthread_create(production_threads[id], nullptr, ProductionFunc, arg);
 }
 
 void Factory::produce(int num_products, Product *products) {
+    pthread_mutex_lock(&products_lock);
+    while (products_being_edited) {
+        pthread_cond_wait(&products_cond, &products_lock);
+    }
+    for (int i = 0; i < num_products; ++i) {
+        available_products.push_back(products[i]);
+    }
+    products_being_edited = false;
+    pthread_cond_signal(&products_cond);
+    pthread_mutex_unlock(&products_lock);
 }
 
 void Factory::finishProduction(unsigned int id) {
+    pthread_mutex_lock(&products_lock);
+    while(products_being_edited){
+        pthread_cond_wait(&products_cond, &products_lock);
+    }
+    pthread_cancel(*(production_threads[id]));
+    removeProductionThreadByID(id);
+    pthread_cond_signal(&products_cond);
+    pthread_mutex_unlock(&products_lock);
 }
 
 void Factory::startSimpleBuyer(unsigned int id) {
@@ -100,9 +122,19 @@ void Factory::openReturningService() {
 }
 
 std::list<std::pair<Product, int>> Factory::listStolenProducts() {
-    return std::list<std::pair<Product, int>>(*stolen_products);
+    return std::list<std::pair<Product, int>>(stolen_products);
 }
 
 std::list<Product> Factory::listAvailableProducts() {
-    return std::list<Product>(*available_products);
+    return std::list<Product>(available_products);
+}
+
+void Factory::removeProductionThreadByID(unsigned int id) {
+    delete production_threads[id];
+    production_threads.erase(id);
+}
+
+void Factory::removeThiefThreadByID(unsigned int id) {
+    delete thief_threads[id];
+    thief_threads.erase(id);
 }
