@@ -6,6 +6,12 @@
 #include <map>
 #include "Product.h"
 
+//class Thread {
+//public:
+//    pthread_t* thread_ptr;
+//    int thread_id;
+//};
+
 class Factory {
 private:
     bool open_to_returns;
@@ -14,9 +20,11 @@ private:
 
     // the threads currently running
     std::map<unsigned int, pthread_t *> production_threads;
+    std::map<unsigned int, pthread_t *> simple_buyer_threads;
     std::map<unsigned int, pthread_t *> thief_threads;
 
     // the factory's available products
+    unsigned int num_available_products;
     std::list<Product> available_products;
     bool products_being_edited;
     pthread_cond_t products_cond;
@@ -28,7 +36,7 @@ private:
 public:
     Factory();
 
-    ~Factory()= default;
+    ~Factory();
 
     void startProduction(int num_products, Product *products, unsigned int id);
 
@@ -68,7 +76,13 @@ public:
 
     std::list<Product> listAvailableProducts();
 
-    void removeProductionThreadByID(unsigned int id);
+//    void updateProductionThreads(unsigned int id, int thread_id);
+//    void updateThiefThreads();
+//    void updateCompanyThreads();
+
+    void removeProductionThreadFromList(unsigned int id);
+
+    void removeSimpleBuyerThreadByID(unsigned int id);
 
     void removeThiefThreadByID(unsigned int id);
 
