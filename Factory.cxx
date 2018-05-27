@@ -28,6 +28,21 @@ public:
     unsigned int id;
 };
 
+class CompanyArgument {
+public:
+    CompanyArgument(Factory *factory, int num_products, int min_value,
+                    unsigned int id) : factory(factory),
+                                       num_products(num_products),
+                                       id(id), min_value(min_value) {}
+
+    ~CompanyArgument() = default;
+
+    Factory *factory;
+    unsigned int id;
+    int num_products;
+    int min_value;
+};
+
 Factory::Factory() : open_to_returns(true), open_to_visitors(true),
                      products_being_edited(false), num_available_products(0) {
     pthread_mutexattr_init(&products_lock_attributes);
@@ -88,7 +103,7 @@ void Factory::finishProduction(unsigned int id) {
 void *simpleBuyerFunc(void *arg) {
     auto factory = static_cast<ProductionArgument *>(arg)->factory;
     auto id = static_cast<ProductionArgument *>(arg)->id;
-    auto bought_value = new int(factory->tryBuyOne()); // @TODO free
+    auto bought_value = new int(factory->tryBuyOne()); // @TODO free this memory
     factory->removeSimpleBuyerThreadByID(id);
     delete static_cast<SimpleBuyerArgument *>(arg);
     return bought_value;
@@ -117,20 +132,35 @@ int Factory::tryBuyOne() {
 }
 
 int Factory::finishSimpleBuyer(unsigned int id) {
-    int* bought_value;
+    int *bought_value;
     pthread_mutex_lock(&products_lock);
     while (products_being_edited) {
         pthread_cond_wait(&products_cond, &products_lock);
     }
-    pthread_join(*simple_buyer_threads[id], (void**)&bought_value);
+    pthread_join(*simple_buyer_threads[id], (void **) &bought_value);
     removeProductionThreadFromList(id);
     pthread_cond_broadcast(&products_cond);
     pthread_mutex_unlock(&products_lock);
     return *bought_value;
 }
 
+void *companyFunc(void *arg) {
+    auto factory = static_cast<CompanyArgument *>(arg)->factory;
+    auto num_products = static_cast<CompanyArgument *>(arg)->num_products;
+    auto min_value = static_cast<CompanyArgument *>(arg)->min_value;
+    auto id = static_cast<CompanyArgument *>(arg)->id;
+//    factory->updateProductionThreads(id, pthread_self());
+    factory->buyProducts(num_products);
+    factory->removeProductionThreadFromList(id);
+    delete static_cast<ProductionArgument *>(arg);
+    return nullptr;
+}
+
 void Factory::startCompanyBuyer(int num_products, int min_value,
                                 unsigned int id) {
+    company_threads[id] = new pthread_t;
+    auto arg = new CompanyArgument(this, num_products, min_value, id);
+    pthread_create(company_threads[id], nullptr, companyFunc, arg);
 }
 
 std::list<Product> Factory::buyProducts(int num_products) {

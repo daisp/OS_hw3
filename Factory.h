@@ -21,6 +21,7 @@ private:
     // the threads currently running
     std::map<unsigned int, pthread_t *> production_threads;
     std::map<unsigned int, pthread_t *> simple_buyer_threads;
+    std::map<unsigned int, pthread_t *> company_threads;
     std::map<unsigned int, pthread_t *> thief_threads;
 
     // the factory's available products
