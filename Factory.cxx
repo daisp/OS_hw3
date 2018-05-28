@@ -43,6 +43,18 @@ public:
     int min_value;
 };
 
+class ThiefArgument {
+public:
+    ThiefArgument(Factory *factory, int num_products, unsigned int fake_id)
+            : factory(factory), num_products(num_products), fake_id(fake_id) {}
+
+    ~ThiefArgument() = default;
+
+    Factory *factory;
+    unsigned int fake_id;
+    int num_products;
+};
+
 Factory::Factory() : open_to_returns(true), open_to_visitors(true),
                      products_being_edited(false), num_available_products(0) {
     pthread_mutexattr_init(&products_lock_attributes);
@@ -171,7 +183,8 @@ void *companyBuyerFunc(void *arg) {
     auto min_value = static_cast<CompanyArgument *>(arg)->min_value;
     auto id = static_cast<CompanyArgument *>(arg)->id;
     auto bought_products = factory->buyProducts(num_products);
-    auto num_returned_ptr = new int(filterProducts(&bought_products, min_value));
+    auto num_returned_ptr = new int(
+            filterProducts(&bought_products, min_value));
     factory->returnProducts(bought_products, id);
     factory->removeCompanyThreadFromList(id);
     delete static_cast<CompanyArgument *>(arg);
@@ -223,28 +236,58 @@ void Factory::returnProducts(std::list<Product> products, unsigned int id) {
 int Factory::finishCompanyBuyer(unsigned int id) {
     int *num_returned_ptr;
     int num_returned;
-//    pthread_mutex_lock(&products_lock);
-//    while (products_being_edited) {
-//        pthread_cond_wait(&products_cond, &products_lock);
-//    }
     pthread_join(*company_buyer_threads[id], (void **) &num_returned_ptr);
     removeCompanyThreadFromList(id);
-//    pthread_cond_broadcast(&products_cond);
-//    pthread_mutex_unlock(&products_lock);
     num_returned = *num_returned_ptr;
     delete num_returned_ptr;
     return num_returned;
 }
 
+void *thiefFunc(void *arg) {
+    auto factory = static_cast<ThiefArgument *>(arg)->factory;
+    auto num_products = static_cast<ThiefArgument *>(arg)->num_products;
+    auto fake_id = static_cast<ThiefArgument *>(arg)->fake_id;
+    auto num_stolen_ptr = new int(factory->stealProducts(num_products, fake_id));
+    factory->removeThiefThreadFromList(fake_id);
+    delete static_cast<ThiefArgument *>(arg);
+    return num_stolen_ptr;
+}
+
 void Factory::startThief(int num_products, unsigned int fake_id) {
+    thief_threads[fake_id] = new pthread_t;
+    auto arg = new ThiefArgument(this, num_products, fake_id);
+    pthread_create(thief_threads[fake_id], nullptr, thiefFunc, arg);
 }
 
 int Factory::stealProducts(int num_products, unsigned int fake_id) {
-    return 0;
+    int num_stolen_products = 0;
+    pthread_mutex_lock(&products_lock);
+    while (products_being_edited) {
+        pthread_cond_wait(&products_cond, &products_lock);
+    }
+    products_being_edited = true;
+    for (int i = 0; i < num_products && num_available_products > 0; ++i) {
+        std::pair<Product, int> pair = std::pair(available_products.back(),
+                                                 static_cast<int>(fake_id));
+        stolen_products.push_back(pair);
+        available_products.pop_back();
+        num_stolen_products++;
+        num_available_products--;
+    }
+    products_being_edited = false;
+    pthread_cond_broadcast(&products_cond);
+    pthread_mutex_unlock(&products_lock);
+    return num_stolen_products;
 }
 
 int Factory::finishThief(unsigned int fake_id) {
-    return 0;
+    int *num_stolen_ptr;
+    int num_stolen;
+    pthread_join(*thief_threads[fake_id], (void **) &num_stolen_ptr);
+    removeThiefThreadFromList(fake_id);
+    num_stolen = *num_stolen_ptr;
+    delete num_stolen_ptr;
+    return num_stolen;
 }
 
 void Factory::closeFactory() {
