@@ -26,8 +26,16 @@ private:
     pthread_mutex_t products_lock;
     pthread_mutexattr_t products_lock_attributes; // for initialization purposes
 
+    void removeProductionThreadFromList(unsigned int id);
+
+    void removeSimpleBuyerThreadFromList(unsigned int id);
+
+    void removeCompanyThreadFromList(unsigned int id);
+
+    void removeThiefThreadFromList(unsigned int id);
 
 public:
+
     Factory();
 
     ~Factory();
@@ -69,15 +77,6 @@ public:
     std::list<std::pair<Product, int>> listStolenProducts();
 
     std::list<Product> listAvailableProducts();
-
-    void removeProductionThreadFromList(unsigned int id);
-
-    void removeSimpleBuyerThreadFromList(unsigned int id);
-
-    void removeCompanyThreadFromList(unsigned int id);
-
-    void removeThiefThreadFromList(unsigned int id);
-
 };
 
 #endif // FACTORY_H_
