@@ -8,19 +8,38 @@
 
 class Factory {
 private:
-    bool open_to_returns;
+    pthread_mutex_t open_to_visitors_lock;
+    pthread_mutexattr_t open_to_visitors_lock_attributes; // for init purposes
+    pthread_cond_t open_to_visitors_cond;
     bool open_to_visitors;
-    std::list<std::pair<Product, int>> stolen_products;
 
-    // the threads currently running
+    pthread_mutex_t open_to_returns_lock;
+    pthread_mutexattr_t open_to_returns_lock_attributes; // for init purposes
+    pthread_cond_t open_to_returns_cond;
+
+    bool open_to_returns;
+
+
+    // the threads currently running and their locks
     std::map<unsigned int, pthread_t *> production_threads;
-    std::map<unsigned int, pthread_t *> simple_buyer_threads;
-    std::map<unsigned int, pthread_t *> company_buyer_threads;
-    std::map<unsigned int, pthread_t *> thief_threads;
+//    pthread_mutex_t production_threads_lock;
+//    pthread_mutexattr_t production_threads_lock_attributes; // for initialization purposes
 
-    // the factory's available products
-    unsigned int num_available_products;
+    std::map<unsigned int, pthread_t *> simple_buyer_threads;
+//    pthread_mutex_t simple_buyer_threads_lock;
+//    pthread_mutexattr_t simple_buyer_threads_lock_attributes; // for initialization purposes
+
+    std::map<unsigned int, pthread_t *> company_buyer_threads;
+//    pthread_mutex_t company_buyer_threads_lock;
+//    pthread_mutexattr_t company_buyer_threads_lock_attributes; // for initialization purposes
+
+    std::map<unsigned int, pthread_t *> thief_threads;
+//    pthread_mutex_t thief_threads_lock;
+//    pthread_mutexattr_t thief_threads_lock_attributes; // for initialization purposes
+
+    // the factory's available and stolen products, and their lock
     std::list<Product> available_products;
+    std::list<std::pair<Product, int>> stolen_products;
     bool products_being_edited;
     pthread_cond_t products_cond;
     pthread_mutex_t products_lock;

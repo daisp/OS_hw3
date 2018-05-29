@@ -2,23 +2,31 @@
 #include <vector>
 
 void Factory::removeProductionThreadFromList(unsigned int id) {
+//    pthread_mutex_lock(&production_threads_lock);
     delete production_threads[id];
     production_threads.erase(id);
+//    pthread_mutex_unlock(&production_threads_lock);
 }
 
 void Factory::removeSimpleBuyerThreadFromList(unsigned int id) {
+//    pthread_mutex_lock(&simple_buyer_threads_lock);
     delete simple_buyer_threads[id];
     simple_buyer_threads.erase(id);
+//    pthread_mutex_unlock(&simple_buyer_threads_lock);
 }
 
 void Factory::removeCompanyThreadFromList(unsigned int id) {
+//    pthread_mutex_lock(&company_buyer_threads_lock);
     delete company_buyer_threads[id];
     company_buyer_threads.erase(id);
+//    pthread_mutex_unlock(&company_buyer_threads_lock);
 }
 
 void Factory::removeThiefThreadFromList(unsigned int id) {
+//    pthread_mutex_lock(&thief_threads_lock);
     delete thief_threads[id];
     thief_threads.erase(id);
+//    pthread_mutex_unlock(&thief_threads_lock);
 }
 
 class ProductionArgument {
@@ -72,16 +80,59 @@ public:
 };
 
 Factory::Factory() : open_to_returns(true), open_to_visitors(true),
-                     products_being_edited(false), num_available_products(0) {
+                     products_being_edited(false) {
+
+    pthread_mutexattr_init(&open_to_visitors_lock_attributes);
+    pthread_mutexattr_settype(&open_to_visitors_lock_attributes,
+                              PTHREAD_MUTEX_ERRORCHECK);
+    pthread_mutex_init(&open_to_visitors_lock,
+                       &open_to_visitors_lock_attributes);
+    pthread_cond_init(&open_to_visitors_cond, nullptr);
+    //=================================================================
+    pthread_mutexattr_init(&open_to_returns_lock_attributes);
+    pthread_mutexattr_settype(&open_to_returns_lock_attributes,
+                              PTHREAD_MUTEX_ERRORCHECK);
+    pthread_mutex_init(&open_to_returns_lock, &open_to_returns_lock_attributes);
+    pthread_cond_init(&open_to_returns_cond, nullptr);
+    //=================================================================
     pthread_mutexattr_init(&products_lock_attributes);
     pthread_mutexattr_settype(&products_lock_attributes,
                               PTHREAD_MUTEX_ERRORCHECK);
     pthread_mutex_init(&products_lock, &products_lock_attributes);
     pthread_cond_init(&products_cond, nullptr);
+//    //==================================================================
+//    pthread_mutexattr_init(&production_threads_lock_attributes);
+//    pthread_mutexattr_settype(&production_threads_lock_attributes,
+//                              PTHREAD_MUTEX_ERRORCHECK);
+//    pthread_mutex_init(&production_threads_lock,
+//                       &production_threads_lock_attributes);
+//    //==================================================================
+//    pthread_mutexattr_init(&simple_buyer_threads_lock_attributes);
+//    pthread_mutexattr_settype(&simple_buyer_threads_lock_attributes,
+//                              PTHREAD_MUTEX_ERRORCHECK);
+//    pthread_mutex_init(&simple_buyer_threads_lock,
+//                       &simple_buyer_threads_lock_attributes);
+//    //==================================================================
+//    pthread_mutexattr_init(&company_buyer_threads_lock_attributes);
+//    pthread_mutexattr_settype(&company_buyer_threads_lock_attributes,
+//                              PTHREAD_MUTEX_ERRORCHECK);
+//    pthread_mutex_init(&company_buyer_threads_lock,
+//                       &company_buyer_threads_lock_attributes);
+//    //==================================================================
+//    pthread_mutexattr_init(&thief_threads_lock_attributes);
+//    pthread_mutexattr_settype(&thief_threads_lock_attributes,
+//                              PTHREAD_MUTEX_ERRORCHECK);
+//    pthread_mutex_init(&thief_threads_lock,
+//                       &thief_threads_lock_attributes);
 }
 
 Factory::~Factory() {
     pthread_cond_destroy(&products_cond);
+    pthread_mutex_destroy(&products_lock);
+    pthread_mutex_destroy(&open_to_visitors_lock);
+    pthread_cond_destroy(&open_to_visitors_cond);
+    pthread_mutex_destroy(&open_to_returns_lock);
+    pthread_cond_destroy(&open_to_returns_cond);
 }
 
 void *productionFunc(void *arg) {
@@ -95,7 +146,9 @@ void *productionFunc(void *arg) {
 
 void Factory::startProduction(int num_products, Product *products,
                               unsigned int id) {
+//    pthread_mutex_lock(&production_threads_lock);
     production_threads[id] = new pthread_t;
+//    pthread_mutex_unlock(&production_threads_lock);
     auto arg = new ProductionArgument(this, num_products, products, id);
     pthread_create(production_threads[id], nullptr, productionFunc,
                    arg);
@@ -106,17 +159,18 @@ void Factory::produce(int num_products, Product *products) {
     while (products_being_edited) {
         pthread_cond_wait(&products_cond, &products_lock);
     }
+    products_being_edited = true;
     for (int i = 0; i < num_products; ++i) {
         available_products.push_back(products[i]);
     }
-    num_available_products += num_products;
     products_being_edited = false;
     pthread_cond_signal(&products_cond);
     pthread_mutex_unlock(&products_lock);
 }
 
 void Factory::finishProduction(unsigned int id) {
-    pthread_join(*production_threads[id], nullptr);
+    void **result = nullptr;
+    pthread_join(*production_threads[id], result);
     removeProductionThreadFromList(id);
 }
 
@@ -128,23 +182,29 @@ void *simpleBuyerFunc(void *arg) {
 }
 
 void Factory::startSimpleBuyer(unsigned int id) {
+//    pthread_mutex_lock(&simple_buyer_threads_lock);
     simple_buyer_threads[id] = new pthread_t;
+//    pthread_mutex_unlock(&simple_buyer_threads_lock);
     auto arg = new SimpleBuyerArgument(this, id);
     pthread_create(simple_buyer_threads[id], nullptr, simpleBuyerFunc, arg);
 }
 
 int Factory::tryBuyOne() {
+    pthread_mutex_lock(&open_to_visitors_lock);
+    while (!open_to_visitors) {
+        pthread_mutex_unlock(&open_to_visitors_lock);
+        return -1;
+    }
     pthread_mutex_lock(&products_lock);
-    while (products_being_edited || num_available_products == 0) {
+    while (products_being_edited || available_products.empty()) {
         pthread_mutex_unlock(&products_lock);
         return -1;
     }
     products_being_edited = true;
-    int value = available_products.back().getId();
-    available_products.pop_back();
-    num_available_products--;
+    int value = available_products.front().getValue();
+    available_products.pop_front();
     products_being_edited = false;
-    pthread_cond_broadcast(&products_cond);
+    pthread_cond_signal(&products_cond);
     pthread_mutex_unlock(&products_lock);
     return value;
 }
@@ -192,44 +252,59 @@ void *companyBuyerFunc(void *arg) {
 
 void Factory::startCompanyBuyer(int num_products, int min_value,
                                 unsigned int id) {
+//    pthread_mutex_lock(&company_buyer_threads_lock);
     company_buyer_threads[id] = new pthread_t;
+//    pthread_mutex_unlock(&company_buyer_threads_lock);
     auto arg = new CompanyArgument(this, num_products, min_value, id);
     pthread_create(company_buyer_threads[id], nullptr, companyBuyerFunc, arg);
 }
 
 std::list<Product> Factory::buyProducts(int num_products) {
     auto bought_products = std::list<Product>();
+    pthread_mutex_lock(&open_to_visitors_lock);
+    while (!open_to_visitors) {
+        pthread_cond_wait(&open_to_visitors_cond, &open_to_visitors_lock);
+    }
     pthread_mutex_lock(&products_lock);
-    while (products_being_edited || num_available_products < num_products) {
+    while (!thief_threads.empty() || products_being_edited ||
+           available_products.size() < num_products) {
         pthread_cond_wait(&products_cond, &products_lock);
     }
     products_being_edited = true;
     for (int i = 0; i < num_products; ++i) {
-        bought_products.push_back(available_products.back());
-        available_products.pop_back();
+        bought_products.push_back(available_products.front());
+        available_products.pop_front();
     }
-    num_available_products -= num_products;
     products_being_edited = false;
-    pthread_cond_broadcast(&products_cond);
+    pthread_cond_signal(&products_cond);
     pthread_mutex_unlock(&products_lock);
+    pthread_mutex_unlock(&open_to_visitors_lock);
     return bought_products;
 }
 
 void Factory::returnProducts(std::list<Product> products, unsigned int id) {
+    pthread_mutex_lock(&open_to_visitors_lock);
+    while (!open_to_visitors) {
+        pthread_cond_wait(&open_to_visitors_cond, &open_to_visitors_lock);
+    }
+    pthread_mutex_lock(&open_to_returns_lock);
+    while (!open_to_returns) {
+        pthread_cond_wait(&open_to_returns_cond, &open_to_returns_lock);
+    }
     pthread_mutex_lock(&products_lock);
-    while (products_being_edited) {
+    while (products_being_edited || !open_to_returns) {
         pthread_cond_wait(&products_cond, &products_lock);
     }
     products_being_edited = true;
     for (int i = 0; i < products.size(); ++i) {
-        available_products.push_back(products.back());
+        available_products.push_back(products.front());
         products.pop_back();
-        /* @TODO check order of insertion and deletion of all product arrays */
     }
-    num_available_products += products.size();
     products_being_edited = false;
-    pthread_cond_broadcast(&products_cond);
+    pthread_cond_signal(&products_cond);
     pthread_mutex_unlock(&products_lock);
+    pthread_mutex_unlock(&open_to_returns_lock);
+    pthread_mutex_unlock(&open_to_visitors_lock);
 }
 
 int Factory::finishCompanyBuyer(unsigned int id) {
@@ -253,28 +328,29 @@ void *thiefFunc(void *arg) {
 }
 
 void Factory::startThief(int num_products, unsigned int fake_id) {
+//    pthread_mutex_lock(&thief_threads_lock);
     thief_threads[fake_id] = new pthread_t;
+//    pthread_mutex_unlock(&thief_threads_lock);
     auto arg = new ThiefArgument(this, num_products, fake_id);
     pthread_create(thief_threads[fake_id], nullptr, thiefFunc, arg);
 }
 
 int Factory::stealProducts(int num_products, unsigned int fake_id) {
-    int num_stolen_products = 0;
     pthread_mutex_lock(&products_lock);
-    while (products_being_edited) {
+    int num_stolen_products = 0;
+    while (products_being_edited || !open_to_visitors) {
         pthread_cond_wait(&products_cond, &products_lock);
     }
     products_being_edited = true;
-    for (int i = 0; i < num_products && num_available_products > 0; ++i) {
-        std::pair<Product, int> pair = std::pair(available_products.back(),
-                                                 static_cast<int>(fake_id));
+    for (int i = 0; i < num_products && !available_products.empty(); ++i) {
+        std::pair<Product, int> pair = std::pair<Product, int>(
+                available_products.front(), static_cast<int>(fake_id));
         stolen_products.push_back(pair);
-        available_products.pop_back();
+        available_products.pop_front();
         num_stolen_products++;
-        num_available_products--;
     }
     products_being_edited = false;
-    pthread_cond_broadcast(&products_cond);
+    pthread_cond_signal(&products_cond);
     pthread_mutex_unlock(&products_lock);
     return num_stolen_products;
 }
@@ -290,19 +366,30 @@ int Factory::finishThief(unsigned int fake_id) {
 }
 
 void Factory::closeFactory() {
+    pthread_mutex_lock(&open_to_visitors_lock);
     this->open_to_visitors = false;
+    pthread_mutex_unlock(&open_to_visitors_lock);
 }
 
 void Factory::openFactory() {
+    pthread_mutex_lock(&open_to_visitors_lock);
     this->open_to_visitors = true;
+    pthread_cond_broadcast(&open_to_visitors_cond);
+    pthread_mutex_unlock(&open_to_visitors_lock);
 }
 
 void Factory::closeReturningService() {
+    pthread_mutex_lock(&open_to_returns_lock);
     this->open_to_returns = false;
+    pthread_mutex_unlock(&open_to_returns_lock);
 }
 
 void Factory::openReturningService() {
+    pthread_mutex_lock(&open_to_returns_lock);
     this->open_to_returns = true;
+    pthread_cond_broadcast(&open_to_returns_cond);
+    pthread_mutex_unlock(&open_to_returns_lock);
+
 }
 
 std::list<std::pair<Product, int>> Factory::listStolenProducts() {
@@ -312,5 +399,3 @@ std::list<std::pair<Product, int>> Factory::listStolenProducts() {
 std::list<Product> Factory::listAvailableProducts() {
     return available_products;
 }
-
-
