@@ -150,8 +150,7 @@ void Factory::startProduction(int num_products, Product *products,
     production_threads[id] = new pthread_t;
 //    pthread_mutex_unlock(&production_threads_lock);
     auto arg = new ProductionArgument(this, num_products, products, id);
-    pthread_create(production_threads[id], nullptr, productionFunc,
-                   arg);
+    pthread_create(production_threads[id], nullptr, productionFunc, arg);
 }
 
 void Factory::produce(int num_products, Product *products) {
@@ -198,6 +197,7 @@ int Factory::tryBuyOne() {
     pthread_mutex_lock(&products_lock);
     while (products_being_edited || available_products.empty()) {
         pthread_mutex_unlock(&products_lock);
+        pthread_mutex_unlock(&open_to_visitors_lock);
         return -1;
     }
     products_being_edited = true;
@@ -206,6 +206,7 @@ int Factory::tryBuyOne() {
     products_being_edited = false;
     pthread_cond_signal(&products_cond);
     pthread_mutex_unlock(&products_lock);
+    pthread_mutex_unlock(&open_to_visitors_lock);
     return value;
 }
 
@@ -268,6 +269,7 @@ std::list<Product> Factory::buyProducts(int num_products) {
     pthread_mutex_lock(&products_lock);
     while (!thief_threads.empty() || products_being_edited ||
            available_products.size() < num_products) {
+        pthread_mutex_unlock(&open_to_visitors_lock);
         pthread_cond_wait(&products_cond, &products_lock);
     }
     products_being_edited = true;
@@ -289,10 +291,13 @@ void Factory::returnProducts(std::list<Product> products, unsigned int id) {
     }
     pthread_mutex_lock(&open_to_returns_lock);
     while (!open_to_returns) {
+        pthread_mutex_unlock(&open_to_visitors_lock);
         pthread_cond_wait(&open_to_returns_cond, &open_to_returns_lock);
     }
     pthread_mutex_lock(&products_lock);
     while (products_being_edited || !open_to_returns) {
+        pthread_mutex_unlock(&open_to_visitors_lock);
+        pthread_mutex_unlock(&open_to_returns_lock);
         pthread_cond_wait(&products_cond, &products_lock);
     }
     products_being_edited = true;
