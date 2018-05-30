@@ -16,10 +16,10 @@ private:
     pthread_mutex_t open_to_returns_lock;
     pthread_mutexattr_t open_to_returns_lock_attributes; // for init purposes
     pthread_cond_t open_to_returns_cond;
-
     bool open_to_returns;
 
-
+    unsigned int thief_count;
+    unsigned int company_buyer_count;
     // the threads currently running and their locks
     std::map<unsigned int, pthread_t *> production_threads;
 //    pthread_mutex_t production_threads_lock;
