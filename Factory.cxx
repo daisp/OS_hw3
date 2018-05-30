@@ -275,8 +275,8 @@ std::list<Product> Factory::buyProducts(int num_products) {
            available_products.size() < num_products) {
         pthread_mutex_unlock(&open_to_visitors_lock);
         pthread_cond_wait(&products_cond, &products_lock);
-        pthread_mutex_lock(&products_lock);
         pthread_mutex_lock(&open_to_visitors_lock);
+        pthread_mutex_lock(&products_lock);
     }
     products_being_edited = true;
     for (int i = 0; i < num_products; ++i) {
@@ -284,7 +284,7 @@ std::list<Product> Factory::buyProducts(int num_products) {
         available_products.pop_front();
     }
     products_being_edited = false;
-    pthread_cond_signal(&products_cond);
+    pthread_cond_broadcast(&products_cond);
     pthread_mutex_unlock(&products_lock);
     pthread_mutex_unlock(&open_to_visitors_lock);
     return bought_products;
@@ -300,26 +300,27 @@ void Factory::returnProducts(std::list<Product> products, unsigned int id) {
     while (!open_to_returns) {
         pthread_mutex_unlock(&open_to_visitors_lock);
         pthread_cond_wait(&open_to_returns_cond, &open_to_returns_lock);
-        pthread_mutex_lock(&open_to_returns_lock);
         pthread_mutex_lock(&open_to_visitors_lock);
+        pthread_mutex_lock(&open_to_returns_lock);
     }
     pthread_mutex_lock(&products_lock);
     while (products_being_edited || thief_count > 0) {
         pthread_mutex_unlock(&open_to_returns_lock);
         pthread_mutex_unlock(&open_to_visitors_lock);
         pthread_cond_wait(&products_cond, &products_lock);
-        pthread_mutex_lock(&products_lock);
         pthread_mutex_lock(&open_to_visitors_lock);
         pthread_mutex_lock(&open_to_returns_lock);
+        pthread_mutex_lock(&products_lock);
     }
     products_being_edited = true;
-    for (int i = 0; i < products.size(); ++i) {
+    auto num_to_return = products.size();
+    for (int i = 0; i < num_to_return; ++i) {
         available_products.push_back(products.front());
         products.pop_back();
     }
     products_being_edited = false;
     company_buyer_count--;
-    pthread_cond_signal(&products_cond);
+    pthread_cond_broadcast(&products_cond);
     pthread_mutex_unlock(&products_lock);
     pthread_mutex_unlock(&open_to_returns_lock);
     pthread_mutex_unlock(&open_to_visitors_lock);
@@ -378,7 +379,7 @@ int Factory::stealProducts(int num_products, unsigned int fake_id) {
     }
     products_being_edited = false;
     thief_count--;
-    pthread_cond_signal(&products_cond);
+    pthread_cond_broadcast(&products_cond);
     pthread_mutex_unlock(&products_lock);
     pthread_mutex_unlock(&open_to_visitors_lock);
     return num_stolen_products;

@@ -169,16 +169,16 @@ int smallSynchronizationTest() {
     f->closeFactory();
     f->produce(6, pro);
     f->startCompanyBuyer(4, 10, 1);
-    f->startCompanyBuyer(3, 10, 2);
+//    f->startCompanyBuyer(3, 10, 2);
     f->startThief(1, 3);
     f->startThief(1, 4);
-    f->startCompanyBuyer(2, 10, 5);
-    f->startCompanyBuyer(1, 10, 6);
+//    f->startCompanyBuyer(2, 10, 5);
+//    f->startCompanyBuyer(1, 10, 6);
     f->openFactory();
     assert(f->finishCompanyBuyer(1) == 4);
-    assert(f->finishCompanyBuyer(2) == 3);
-    assert(f->finishCompanyBuyer(5) == 2);
-    assert(f->finishCompanyBuyer(6) == 1);
+//    assert(f->finishCompanyBuyer(2) == 3);
+//    assert(f->finishCompanyBuyer(5) == 2);
+//    assert(f->finishCompanyBuyer(6) == 1);
     assert(f->finishThief(3) == 1);
     assert(f->finishThief(4) == 1);
     f->startCompanyBuyer(4, 0, 7);
@@ -217,7 +217,7 @@ int bigSynchronizationTest() {
 
 
 int main() {
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 10000; i++) {
         std::cout << "The test number is: " << i + 1 << "\n";
 //        simpleBuyerTest();
 //        companyTest();
