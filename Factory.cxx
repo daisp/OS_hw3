@@ -255,7 +255,7 @@ void Factory::returnProducts(std::list<Product> products, unsigned int id) {
     auto num_to_return = products.size();
     for (int i = 0; i < num_to_return; ++i) {
         available_products.push_back(products.front());
-        products.pop_back();
+        products.pop_front();
     }
     products_being_edited = false;
     company_buyer_count--;

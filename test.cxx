@@ -109,7 +109,7 @@ bool testReturnProducts() {
     Factory factory = Factory();
 
     list<Product> avProds = factory.listAvailableProducts();
-    ASSERT_TEST(avProds.size() == 0);
+    ASSERT_TEST(avProds.empty());
 
     list<Product> products_to_return;
     Product products[6];
@@ -141,7 +141,7 @@ bool testReturnProducts() {
     int temp_ids[6] = {1, 2, 3, 4, 5, 6};
     int temp_values[6] = {3, 5, 7, 9, 11, 13};
     int i = 0;
-    for (list<Product>::iterator iterator = avProds.begin(), end = avProds.end();
+    for (auto iterator = avProds.begin(), end = avProds.end();
          iterator != end; ++iterator) {
         ASSERT_TEST((*iterator).getId() == temp_ids[i] &&
                     (*iterator).getValue() == temp_values[i]);
@@ -406,13 +406,13 @@ int main() {
     RUN_TEST(testProduce);
     RUN_TEST(testTryBuyOne);
     RUN_TEST(testBuyProducts);
-//	RUN_TEST(testReturnProducts);
+    RUN_TEST(testReturnProducts);
     RUN_TEST(testStandardRun);
     RUN_TEST(testOpenAndClose);
     RUN_TEST(testCloseReturning);
-    RUN_TEST(testReusingIds);
-    RUN_TEST(
-            testStressTestSync); // if it freezes, that's probably mean you have a deadlock or someting
+//    RUN_TEST(testReusingIds);
+//    RUN_TEST(
+//            testStressTestSync); // if it freezes, that's probably mean you have a deadlock or someting
     return 0;
 }
 
