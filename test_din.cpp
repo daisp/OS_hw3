@@ -217,13 +217,13 @@ int bigSynchronizationTest() {
 
 
 int main() {
-    for (int i = 0; i < 10000; i++) {
+    for (int i = 0; i < 100; i++) {
         std::cout << "The test number is: " << i + 1 << "\n";
-//        simpleBuyerTest();
-//        companyTest();
-//        thiefTest();
-//        mainThreadTest();
-//        smallSynchronizationTest();
+        simpleBuyerTest();
+        companyTest();
+        thiefTest();
+        mainThreadTest();
+        smallSynchronizationTest();
         bigSynchronizationTest();
     }
     std::cout << "Fin :)\n";

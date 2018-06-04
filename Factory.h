@@ -8,13 +8,9 @@
 
 class Factory {
 private:
-    pthread_mutex_t open_to_visitors_lock;
-    pthread_mutexattr_t open_to_visitors_lock_attributes; // for init purposes
     pthread_cond_t open_to_visitors_cond;
     bool open_to_visitors;
 
-    pthread_mutex_t open_to_returns_lock;
-    pthread_mutexattr_t open_to_returns_lock_attributes; // for init purposes
     pthread_cond_t open_to_returns_cond;
     bool open_to_returns;
 
@@ -42,7 +38,7 @@ private:
     std::list<std::pair<Product, int>> stolen_products;
     bool products_being_edited;
     pthread_cond_t products_cond;
-    pthread_mutex_t products_lock;
+    pthread_mutex_t factory_lock;
     pthread_mutexattr_t products_lock_attributes; // for initialization purposes
 
     void removeProductionThreadFromList(unsigned int id);
