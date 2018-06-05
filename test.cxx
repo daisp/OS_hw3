@@ -5,7 +5,7 @@
 #include "test_utilities.h"
 
 #define TEST_SYNC_SIZE 100 // this is not recommended to increase this parameter.
-#define STRESS_TEST_SIZE 1000 // with this parameter you can do whatever you
+#define STRESS_TEST_SIZE 10000 // with this parameter you can do whatever you
 // want
 
 using namespace std;
@@ -310,7 +310,7 @@ bool testCloseReturning() {
     ASSERT_TEST(factory.finishCompanyBuyer(4) == 0);
 
     list<Product> avProds = factory.listAvailableProducts();
-    ASSERT_TEST(avProds.size() == 0);
+    ASSERT_TEST(avProds.empty());
 
     factory.startThief(17, 666);
     ASSERT_TEST(factory.finishThief(666) == 0);
@@ -393,7 +393,7 @@ bool testStressTestSync() {
             return false;
         }
 
-        if (i % 50 == 0) {
+        if (i % 10 == 0) {
             printf("test loop #%d\n", i);
             fflush(stdout);
         }
@@ -403,16 +403,16 @@ bool testStressTestSync() {
 
 
 int main() {
-    RUN_TEST(testProduce);
-    RUN_TEST(testTryBuyOne);
-    RUN_TEST(testBuyProducts);
-    RUN_TEST(testReturnProducts);
-    RUN_TEST(testStandardRun);
-    RUN_TEST(testOpenAndClose);
-    RUN_TEST(testCloseReturning);
+//    RUN_TEST(testProduce);
+//    RUN_TEST(testTryBuyOne);
+//    RUN_TEST(testBuyProducts);
+//    RUN_TEST(testReturnProducts);
+//    RUN_TEST(testStandardRun);
+//    RUN_TEST(testOpenAndClose);
+//    RUN_TEST(testCloseReturning);
 //    RUN_TEST(testReusingIds);
-//    RUN_TEST(
-//            testStressTestSync); // if it freezes, that's probably mean you have a deadlock or someting
+    RUN_TEST(
+            testStressTestSync); // if it freezes, that's probably mean you have a deadlock or someting
     return 0;
 }
 

@@ -3,31 +3,23 @@
 #include <iostream>
 
 void Factory::removeProductionThreadFromList(unsigned int id) {
-//    pthread_mutex_lock(&production_threads_lock);
     delete production_threads[id];
     production_threads.erase(id);
-//    pthread_mutex_unlock(&production_threads_lock);
 }
 
 void Factory::removeSimpleBuyerThreadFromList(unsigned int id) {
-//    pthread_mutex_lock(&simple_buyer_threads_lock);
     delete simple_buyer_threads[id];
     simple_buyer_threads.erase(id);
-//    pthread_mutex_unlock(&simple_buyer_threads_lock);
 }
 
 void Factory::removeCompanyThreadFromList(unsigned int id) {
-//    pthread_mutex_lock(&company_buyer_threads_lock);
     delete company_buyer_threads[id];
     company_buyer_threads.erase(id);
-//    pthread_mutex_unlock(&company_buyer_threads_lock);
 }
 
 void Factory::removeThiefThreadFromList(unsigned int id) {
-//    pthread_mutex_lock(&thief_threads_lock);
     delete thief_threads[id];
     thief_threads.erase(id);
-//    pthread_mutex_unlock(&thief_threads_lock);
 }
 
 class ProductionArgument {
@@ -117,9 +109,14 @@ void Factory::startProduction(int num_products, Product *products,
 }
 
 void Factory::produce(int num_products, Product *products) {
+//    std::cout << "Production " << pthread_self() << " LOCKING STARTED" <<
+//              std::endl;
     pthread_mutex_lock(&factory_lock);
     while (products_being_edited) {
+//        std::cout << "Production " << pthread_self() << " WAITING PRODUCTS" <<
+//                  std::endl;
         pthread_cond_wait(&products_cond, &factory_lock);
+        pthread_mutex_lock(&factory_lock);
     }
     products_being_edited = true;
     for (int i = 0; i < num_products; ++i) {
@@ -127,7 +124,10 @@ void Factory::produce(int num_products, Product *products) {
     }
     products_being_edited = false;
     pthread_cond_signal(&products_cond);
+//    std::cout << "Production " << pthread_self() << " UNLOCKING DONE" <<
+//              std::endl;
     pthread_mutex_unlock(&factory_lock);
+
 }
 
 void Factory::finishProduction(unsigned int id) {
@@ -150,10 +150,13 @@ void Factory::startSimpleBuyer(unsigned int id) {
 }
 
 int Factory::tryBuyOne() {
+//    std::cout << "Simple " << pthread_self() << " LOCKING STARTED" << std::endl;
     pthread_mutex_lock(&factory_lock);
     while (!open_to_visitors || products_being_edited ||
            available_products.empty() || thief_count > 0 ||
            company_buyer_count > 0) {
+//        std::cout << "Simple " << pthread_self() << " UNLOCKING" << std::endl;
+        pthread_cond_signal(&products_cond);
         pthread_mutex_unlock(&factory_lock);
         return -1;
     }
@@ -162,6 +165,7 @@ int Factory::tryBuyOne() {
     available_products.pop_front();
     products_being_edited = false;
     pthread_cond_signal(&products_cond);
+//    std::cout << "Simple " << pthread_self() << " UNLOCKING" << std::endl;
     pthread_mutex_unlock(&factory_lock);
     return id;
 }
@@ -182,16 +186,16 @@ int Factory::finishSimpleBuyer(unsigned int id) {
  * products that should to be returned to the factory.
  */
 int filterProducts(std::list<Product> *bought_products, int min_value) {
-    int num_returned = 0;
+    int num_to_return = 0;
     auto i = bought_products->begin();
     while (i != bought_products->end()) {
         if (i->getValue() >= min_value) i = bought_products->erase(i);
         else {
             ++i;
-            num_returned++;
+            num_to_return++;
         }
     }
-    return num_returned;
+    return num_to_return;
 }
 
 void *companyBuyerFunc(void *arg) {
@@ -200,16 +204,18 @@ void *companyBuyerFunc(void *arg) {
     auto min_value = static_cast<CompanyArgument *>(arg)->min_value;
     auto id = static_cast<CompanyArgument *>(arg)->id;
     auto bought_products = factory->buyProducts(num_products);
-    auto num_returned_ptr = new int(
+    auto num_to_return_ptr = new int(
             filterProducts(&bought_products, min_value));
-    factory->returnProducts(bought_products, id);
+    if (*num_to_return_ptr > 0) factory->returnProducts(bought_products, id);
     delete static_cast<CompanyArgument *>(arg);
-    return num_returned_ptr;
+    return num_to_return_ptr;
 }
 
 void Factory::startCompanyBuyer(int num_products, int min_value,
                                 unsigned int id) {
+    pthread_mutex_lock(&factory_lock);
     company_buyer_count++;
+    pthread_mutex_unlock(&factory_lock);
     company_buyer_threads[id] = new pthread_t;
     auto arg = new CompanyArgument(this, num_products, min_value, id);
     pthread_create(company_buyer_threads[id], nullptr, companyBuyerFunc, arg);
@@ -217,14 +223,39 @@ void Factory::startCompanyBuyer(int num_products, int min_value,
 
 std::list<Product> Factory::buyProducts(int num_products) {
     auto bought_products = std::list<Product>();
+//    std::cout << "Company Buying " << pthread_self() << " LOCKING" << std::endl;
     pthread_mutex_lock(&factory_lock);
     while (!open_to_visitors || thief_count > 0 || products_being_edited ||
            available_products.size() < num_products) {
         if (!open_to_visitors) {
+//            std::cout << "Company Buying " << pthread_self() << " WAITING "
+//                                                                " VISITORS" <<
+//                      std::endl;
             pthread_cond_wait(&open_to_visitors_cond, &factory_lock);
         } else {
+            if (thief_count > 0) {
+//                std::cout << "Company Buying " << pthread_self() << " WAITING"
+//                                                                    " FOR "
+//                                                                    "THEIVES" <<
+//                           std::endl;
+            } else if (available_products.size() < num_products) {
+//                std::cout << "Company Buying " << pthread_self() << " "
+//                                                                   "WAITING "
+//                                                                   "NOT "
+//                                                                   "ENOUGH "
+//                                                                   "PRODUCTS"
+//                                                                   "" <<
+//                          std::endl;
+            }
+//            else std::cout << "Company Buying " << pthread_self() << " "
+//                                                                    "WAITING "
+//                                                                    "PRODUCTS"
+//                                                                    "" <<
+//                        std::endl;
             pthread_cond_wait(&products_cond, &factory_lock);
         }
+//        std::cout << "Company Buying " << pthread_self() << " LOCKING" <<
+//                  std::endl;
         pthread_mutex_lock(&factory_lock);
     }
     products_being_edited = true;
@@ -234,21 +265,44 @@ std::list<Product> Factory::buyProducts(int num_products) {
     }
     products_being_edited = false;
     pthread_cond_broadcast(&products_cond);
+//    std::cout << "Company Buying " << pthread_self() << " UNLOCKING DONE" <<
+//              std::endl;
     pthread_mutex_unlock(&factory_lock);
     return bought_products;
 }
 
 void Factory::returnProducts(std::list<Product> products, unsigned int id) {
+//    std::cout << "Company Returning  " << pthread_self() << " LOCKING "
+//                                                            "START" <<
+//              std::endl;
     pthread_mutex_lock(&factory_lock);
     while (!open_to_visitors || !open_to_returns || products_being_edited ||
            thief_count > 0) {
         if (!open_to_visitors) {
+//            std::cout << "Company Returning  " << pthread_self() << " "
+//                                                                    "WAITING "
+//                                                                    "VISITORS"
+//                                                                    "" <<
+//                      std::endl;
             pthread_cond_wait(&open_to_visitors_cond, &factory_lock);
         } else if (!open_to_returns) {
+            company_buyer_count--;
+//            std::cout << "Company Returning  " << pthread_self() << " "
+//                                                                    "WAITING "
+//                                                                    "RETURNS"
+//                                                                    "" <<
+//                      std::endl;
             pthread_cond_wait(&open_to_returns_cond, &factory_lock);
+            company_buyer_count++;
         } else {
+//            std::cout << "Company Returning  " << pthread_self() << " "
+//                                                                    "WAITING" <<
+//                      std::endl;
             pthread_cond_wait(&products_cond, &factory_lock);
         }
+//        std::cout << "Company Returning  " << pthread_self() << " "
+//                                                                " LOCKING" <<
+//                  std::endl;
         pthread_mutex_lock(&factory_lock);
     }
     products_being_edited = true;
@@ -260,6 +314,9 @@ void Factory::returnProducts(std::list<Product> products, unsigned int id) {
     products_being_edited = false;
     company_buyer_count--;
     pthread_cond_broadcast(&products_cond);
+//    std::cout << "Company Returning  " << pthread_self() << " "
+//                                                            " UNLOCKING DONE" <<
+//              std::endl;
     pthread_mutex_unlock(&factory_lock);
 }
 
@@ -284,7 +341,9 @@ void *thiefFunc(void *arg) {
 }
 
 void Factory::startThief(int num_products, unsigned int fake_id) {
+    pthread_mutex_lock(&factory_lock);
     thief_count++;
+    pthread_mutex_unlock(&factory_lock);
     thief_threads[fake_id] = new pthread_t;
     auto arg = new ThiefArgument(this, num_products, fake_id);
     pthread_create(thief_threads[fake_id], nullptr, thiefFunc, arg);
@@ -292,13 +351,23 @@ void Factory::startThief(int num_products, unsigned int fake_id) {
 
 int Factory::stealProducts(int num_products, unsigned int fake_id) {
     int num_stolen_products = 0;
+//    std::cout << "Thief  " << pthread_self() << " LOCKING STARTED" << " - now "
+//                                                                         "" <<
+//                                                                      thief_count << " thieves"<<
+//                                                                      std::endl;
     pthread_mutex_lock(&factory_lock);
     while (!open_to_visitors || products_being_edited) {
         if (!open_to_visitors) {
+//            std::cout << "Thief  " << pthread_self() << " WAITING VISITORS" <<
+//                      std::endl;
             pthread_cond_wait(&open_to_visitors_cond, &factory_lock);
         } else {
+//            std::cout << "Thief  " << pthread_self() << " WAITING" <<
+//                      std::endl;
             pthread_cond_wait(&products_cond, &factory_lock);
         }
+//        std::cout << "Thief  " << pthread_self() << " LOCKING" <<
+//                  std::endl;
         pthread_mutex_lock(&factory_lock);
     }
     products_being_edited = true;
@@ -312,6 +381,10 @@ int Factory::stealProducts(int num_products, unsigned int fake_id) {
     products_being_edited = false;
     thief_count--;
     pthread_cond_broadcast(&products_cond);
+//    std::cout << "Thief  " << pthread_self() << " UNLOCKING DONE" << " - now "
+//                                                                     "" <<
+//              thief_count << " thieves"<<
+//              std::endl;
     pthread_mutex_unlock(&factory_lock);
     return num_stolen_products;
 }
@@ -327,28 +400,44 @@ int Factory::finishThief(unsigned int fake_id) {
 }
 
 void Factory::closeFactory() {
+//    std::cout << "Primary CloseFactory  " << pthread_self() << " LOCKING" <<
+//              std::endl;
     pthread_mutex_lock(&factory_lock);
     this->open_to_visitors = false;
+//    std::cout << "Primary CloseFactory  " << pthread_self() << " UNLOCKING" <<
+//              std::endl;
     pthread_mutex_unlock(&factory_lock);
 }
 
 void Factory::openFactory() {
+//    std::cout << "Primary OpenFactory  " << pthread_self() << " LOCKING" <<
+//              std::endl;
     pthread_mutex_lock(&factory_lock);
     this->open_to_visitors = true;
     pthread_cond_broadcast(&open_to_visitors_cond);
+//    std::cout << "Primary OpenFactory  " << pthread_self() << " UNLOCKING" <<
+//              std::endl;
     pthread_mutex_unlock(&factory_lock);
 }
 
 void Factory::closeReturningService() {
+//    std::cout << "Primary CloseReturning  " << pthread_self() << " LOCKING" <<
+//              std::endl;
     pthread_mutex_lock(&factory_lock);
     this->open_to_returns = false;
+//    std::cout << "Primary CloseReturning  " << pthread_self() << " UNLOCKING" <<
+//              std::endl;
     pthread_mutex_unlock(&factory_lock);
 }
 
 void Factory::openReturningService() {
+//    std::cout << "Primary OpenReturning  " << pthread_self() << " LOCKING" <<
+//              std::endl;
     pthread_mutex_lock(&factory_lock);
     this->open_to_returns = true;
     pthread_cond_broadcast(&open_to_returns_cond);
+//    std::cout << "Primary OpenReturning  " << pthread_self() << " UNLOCKING" <<
+//              std::endl;
     pthread_mutex_unlock(&factory_lock);
 
 }
